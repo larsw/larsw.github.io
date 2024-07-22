@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yet Another ASCII Table</title>
+    <style>
+      body {
+        font-family: "Jetbrains Mono", Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        background-color: #f0f8ff;
+        color: black;
+        clear: none;
+        min-height: 100vh;
+        overflow: auto;
+      }
+      .layout-container {
+        display: grid;
+        grid-template-columns: 0.25fr 4fr;
+      }
+      input[type="text"] {
+        font-family: "Jetbrains Mono", Arial, Helvetica, sans-serif;
+        width: 100%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        box-sizing: border-box;
+        border: 2px solid #ccc;
+        border-radius: 20px;
+      }
+
+      .status-box {
+        background-color: #ccffcc;
+        color: #333;
+        padding: 10px;
+        border-radius: 5px;
+        display: none;
+      }
+
+      /* Animation: fade in, stay, fade out */
+      @keyframes showAndHide {
+        0%,
+        100% {
+          opacity: 0;
+        }
+        10%,
+        90% {
+          opacity: 1;
+        }
+      }
+
+      /* Class to control the visibility and animation */
+      .show-status {
+        display: block; /* Make visible */
+        animation: showAndHide 3s ease forwards; /* Complete animation in 3 seconds */
+      }
+
+      [type="checkbox"] {
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body onload="onLoad()">
+    <div class="layout-container">
+      <div>
+        <h1>Yet Another ASCII Table</h1>
+        <h2>Because asciitable.com sucks</h2>
+        <input
+          type="text"
+          id="search"
+          placeholder="Search..."
+          oninput="onSearch(this)"
+        />
+        <label for="exactMatch">
+          <input type="checkbox" id="exactMatch" oninput="refresh()" />Exact
+          match
+        </label>
+        <br />
+        <label for="caseSensitive">
+          <input
+            type="checkbox"
+            id="caseSensitive"
+            oninput="refresh()"
+          />Case-sensitive
+        </label>
+
+        <!-- input box for hex value of background color for highlighting -->
+        <label for="hexColor"
+          >Highlight color:
+          <input
+            type="text"
+            id="hexColor"
+            placeholder="#ff00ff"
+            oninput="refresh()"
+          />
+        </label>
+
+        <div>
+          <h3>Usage</h3>
+          <p>
+            To use the ASCII Table, simply type in the search box to highlight
+            the character you are looking for. Double-click on the character to
+            copy the value to the clipboard.
+          </p>
+          <h3>Author</h3>
+          <p>@larsw</p>
+        </div>
+        <div id="statusBox" class="status-box">status</div>
+      </div>
+      <div>
+        <ascii-table
+          onvalueselected="onValueSelected"
+          highlight-background="#ff00ff"
+        />
+      </div>
+    </div>
+    <script type="application/javascript">
+      function onLoad() {
+        // check if the checkbox states are saved in local storage and restore
+        const exactMatch = document.getElementById("exactMatch");
+        const caseSensitive = document.getElementById("caseSensitive");
+        const hexColor = document.getElementById("hexColor");
+
+        const exactMatchChecked = localStorage.getItem("exactMatch");
+        if (exactMatchChecked !== null) {
+          if (exactMatchChecked === "true") {
+            exactMatch.checked = true;
+          } else {
+            exactMatch.checked = false;
+          }
+        } else {
+          exactMatch.checked = true;
+        }
+
+        const caseSensitiveChecked = localStorage.getItem("caseSensitive");
+        if (caseSensitiveChecked !== null) {
+          if (caseSensitiveChecked === "true") {
+            caseSensitive.checked = true;
+          } else {
+            caseSensitive.checked = false;
+          }
+        } else {
+          caseSensitive.checked = true;
+        }
+
+        const hexColorValue = localStorage.getItem("hexColor");
+        if (hexColorValue !== null) {
+          hexColor.value = hexColorValue;
+        } else {
+          hexColor.value = "#ff00ff";
+        }
+
+        const asciiTable = document.querySelector("ascii-table");
+        asciiTable.setAttribute("highlight-background", hexColor.value);
+
+        const search = document.getElementById("search");
+        search.focus();
+      }
+
+      function onSearch(e) {
+        const asciiTable = document.querySelector("ascii-table");
+        const exactMatch = document.getElementById("exactMatch").checked;
+        const caseSensitive = document.getElementById("caseSensitive").checked;
+        asciiTable.highlight(e.value, exactMatch, caseSensitive);
+      }
+
+      function refresh() {
+        // save the checkbox states in local storage
+        const exactMatch = document.getElementById("exactMatch").checked;
+        const caseSensitive = document.getElementById("caseSensitive").checked;
+
+        localStorage.setItem("exactMatch", exactMatch);
+        localStorage.setItem("caseSensitive", caseSensitive);
+
+        const hexColor = document.getElementById("hexColor").value;
+        localStorage.setItem("hexColor", hexColor);
+        // update ascii-table
+        const asciiTable = document.querySelector("ascii-table");
+        asciiTable.setAttribute("highlight-background", hexColor);
+
+        const search = document.getElementById("search");
+        onSearch(search);
+      }
+
+      function onValueSelected(e) {
+        const statusBox = document.getElementById("statusBox");
+        statusBox.textContent = `${e.detail.value} copied to the clipboard`;
+        statusBox.style.display = "block";
+        statusBox.classList.add("show-status");
+
+        // Remove the class at the end of the animation to reset the state
+        statusBox.addEventListener(
+          "animationend",
+          () => {
+            statusBox.classList.remove("show-status");
+            statusBox.style.display = "none"; // Ensure it's hidden after animation
+          },
+          { once: true }
+        );
+      }
+
+      class TableCellSelected extends CustomEvent {
+        constructor(value) {
+          super("valueselected", {
+            detail: {
+              value: value,
+            },
+          });
+        }
+      }
+
+      class AsciiTable extends HTMLElement {
+        static observedAttributes = ["highlight-background"];
+
+        static specialCharacters = {
+          0: ["NUL", "null"],
+          1: ["SOH", "start of heading"],
+          2: ["STX", "Start of text"],
+          3: ["ETX", "End of text"],
+          4: ["EOT", "End of transmission"],
+          5: ["ENQ", "enquiry"],
+          6: ["ACK", "acknowledge"],
+          7: ["BEL", "bell"],
+          8: ["BS", "backspace"],
+          9: ["TAB", "horizontal tabulator"],
+          10: ["LF", "line feed"],
+          11: ["VT", "vertical tabulator"],
+          12: ["FF", "form feed"],
+          13: ["CR", "carriage return"],
+          14: ["SO", "shift out"],
+          15: ["SI", "shift in"],
+          16: ["DLE", "data link escape"],
+          17: ["DC1", "device control 1"],
+          18: ["DC2", "device control 2"],
+          19: ["DC3", "device control 3"],
+          20: ["DC4", "device control 4"],
+          21: ["NAK", "negative acknowledgement"],
+          22: ["SYN", "synchronous idle"],
+          23: ["ETB", "end of transmission block"],
+          24: ["CAN", "cancel"],
+          25: ["EM", "end of medium"],
+          26: ["SUB", "substitute"],
+          27: ["ESC", "escape"],
+          28: ["FS", "file separator"],
+          29: ["GS", "group separator"],
+          30: ["RS", "record separator"],
+          31: ["US", "unit separator"],
+          32: ["SP", "space"],
+          127: ["DEL", "delete"],
+        };
+
+        dispatchEvent(event) {
+          super.dispatchEvent(event);
+          const eventFire = this["on" + event.type];
+          if (eventFire) {
+            eventFire(event);
+          } else {
+            const func = new Function(
+              "e",
+              `with(document) {
+                  with(this) {
+                    let attr = ${this.getAttribute("on" + event.type)};
+                    if(typeof attr === 'function') { attr(e) };
+                  }
+                }`
+            );
+            func.call(this, event);
+          }
+        }
+
+        constructor() {
+          super();
+          this.attachShadow({ mode: "open" });
+
+          const highlightBackground =
+            this.attributes["highlight-background"] ?? "#ff00ff";
+
+          // setup style
+          const style = document.createElement("style");
+          style.innerHTML = `
+                :host {
+                  display: flex;
+                  flex-wrap: wrap;
+                  justify-content: center;
+                  align-items: center;
+                  margin: auto;
+                  padding: 0;
+                  background-color: #f0f8ff;
+                  color: black;            }
+                table {
+                  font-family: "Jetbrains Mono", Arial, Helvetica, sans-serif;
+                  font-size: 17px;
+                  color: black;
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin: 20px;
+                  border: 2px solid #ddd;
+                  background-color: #ffffff;
+                  width: 300px;
+                }
+                th,
+                td {
+                  border: 1px solid #ddd;
+                  margin: 0;
+                  padding: 0.0em 0.5em 0.0em 0.0em;
+              
+                  text-align: right;
+                }
+                th {
+                  background-color: #87cefa;
+                  color: #fff;
+                }
+                tr:nth-child(even) {
+                  background-color: #f2f2f2;
+                }
+                td:hover {
+                  text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #ff00ff, 0 0 30px #ff00ff, 0 0 40px #ff00ff, 0 0 50px #ff00ff, 0 0 60px #ff00ff;
+                }
+                .selected {
+                  border: 1px solid black;
+                  background-color: ${highlightBackground};
+                }
+              `;
+          this.shadowRoot.appendChild(style);
+        }
+
+        attributeChangedCallback(name, oldValue, newValue) {
+          if (name === "highlight-background") {
+            console.log("highlight-background changed");
+            // update the style element .selected class
+            const style = this.shadowRoot.styleSheets[0];
+            const rule = style.cssRules[style.cssRules.length - 1];
+            rule.style.backgroundColor = newValue;
+          }
+        }
+
+        highlight(value, exactMatch, caseSensitive) {
+          if (!value || value === "") {
+            const tables = this.shadowRoot.querySelectorAll("table");
+            tables.forEach((table) => {
+              const cells = table.querySelectorAll("td");
+              cells.forEach((cell) => {
+                cell.classList.remove("selected");
+              });
+            });
+            return;
+          }
+
+          const tables = this.shadowRoot.querySelectorAll("table");
+          tables.forEach((table) => {
+            const rows = table.querySelectorAll("tr");
+            rows.forEach((row) => {
+              const cells = row.querySelectorAll("td");
+              cells.forEach((cell) => {
+                if (caseSensitive) {
+                  if (exactMatch) {
+                    if (cell.textContent === value) {
+                      cell.classList.add("selected");
+                    } else {
+                      cell.classList.remove("selected");
+                    }
+                  } else {
+                    if (cell.textContent.includes(value)) {
+                      cell.classList.add("selected");
+                    } else {
+                      cell.classList.remove("selected");
+                    }
+                  }
+                } else {
+                  if (exactMatch) {
+                    if (
+                      cell.textContent.toLowerCase() === value.toLowerCase()
+                    ) {
+                      cell.classList.add("selected");
+                    } else {
+                      cell.classList.remove("selected");
+                    }
+                  } else {
+                    if (
+                      cell.textContent
+                        .toLowerCase()
+                        .includes(value.toLowerCase())
+                    ) {
+                      cell.classList.add("selected");
+                    } else {
+                      cell.classList.remove("selected");
+                    }
+                  }
+                }
+              });
+            });
+          });
+        }
+
+        generateRow(dec) {
+          const hex = dec.toString(16).padStart(2, "0").toUpperCase();
+          const oct = dec.toString(8).padStart(3, "0");
+          let data = "";
+          let title = "";
+          if (AsciiTable.specialCharacters[dec]) {
+            data = AsciiTable.specialCharacters[dec][0];
+            title = AsciiTable.specialCharacters[dec][1];
+          } else {
+            data = String.fromCharCode(dec);
+          }
+          dec = dec.toString().padStart(2, "0");
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${hex}</td>
+                <td>${dec}</td>
+                <td>${oct}</td>
+                <td title="${title}">${data}</td>`;
+          return row;
+        }
+
+        generateRows(n) {
+          const rows = [];
+          const base = 32 * n;
+          for (let i = base; i < base + 32; i++) {
+            rows.push(this.generateRow(i));
+          }
+          return rows;
+        }
+
+        generateTable(n) {
+          const table = document.createElement("table");
+          table.id = `table-${n}`;
+          table.innerHTML = `
+                <thead>
+                  <tr>
+                    <th>Hex</th>
+                    <th>Dec</th>
+                    <th>Oct</th>
+                    <th>Chr</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>`;
+          table.querySelector("tbody").replaceChildren(...this.generateRows(n));
+
+          const selected = Array.from(table.querySelectorAll("td"));
+          selected.map((x) =>
+            x.addEventListener("dblclick", () => {
+              const event = new TableCellSelected(x.textContent);
+              this.dispatchEvent(event);
+            })
+          );
+
+          return table;
+        }
+
+        connectedCallback() {
+          const shadowRoot = this.shadowRoot;
+          for (let i = 0; i < 128 / 32; i++) {
+            const table = this.generateTable(i);
+            shadowRoot.appendChild(table);
+          }
+        }
+
+        disconnectedCallback() {
+          this.shadowRoot.innerHTML = "";
+        }
+      }
+      customElements.define("ascii-table", AsciiTable);
+    </script>
+  </body>
+</html>
