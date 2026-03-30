@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>x86 as an Octal Machine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-glow page-glow-a" aria-hidden="true"></div>
+    <div class="page-glow page-glow-b" aria-hidden="true"></div>
+    <div class="page-grid" aria-hidden="true"></div>
+
+    <header class="hero reveal">
+      <div class="hero-copy">
+        <p class="eyebrow">Interactive prototype</p>
+        <h1>x86 as an octal machine</h1>
+        <p class="lede">
+          A retelling of Mark Hopkins&rsquo; old post: not a flat transcript, but a navigable atlas of opcode
+          families, operand grammar, and address modes.
+        </p>
+      </div>
+
+      <div class="hero-deck">
+        <article class="hero-card stat-card">
+          <span class="stat-value">256</span>
+          <span class="stat-label">octal opcodes in the atlas</span>
+        </article>
+        <article class="hero-card stat-card">
+          <span class="stat-value">4</span>
+          <span class="stat-label">valid byte ranges in the atlas</span>
+        </article>
+        <article class="hero-card stat-card">
+          <span class="stat-value">xrm</span>
+          <span class="stat-label">decoded live as address + register grammar</span>
+        </article>
+        <article class="hero-card example-card">
+          <p class="example-label">Key claim</p>
+          <pre>210 xrm  mov Eb, Rb
+211 xrm  mov Ew, Rw
+212 xrm  mov Rb, Eb
+213 xrm  mov Rw, Ew</pre>
+        </article>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel reveal" id="baseline">
+        <div class="section-heading">
+          <p class="eyebrow">1. 8086 Baseline</p>
+          <h2>Start with Intel&rsquo;s original programmer&rsquo;s model</h2>
+          <p>
+            Before the octal thesis, Intel&rsquo;s 1978-1979 documentation defines
+            a 16-bit CPU with a 20-bit physical address space, four segment
+            registers, a 16-bit instruction pointer, and nine visible flags.
+          </p>
+        </div>
+
+        <div class="baseline-layout">
+          <div class="baseline-main">
+            <section class="content-subsection">
+              <div class="subsection-heading">
+                <p class="subsection-kicker">Programmer&rsquo;s Model</p>
+                <h3>Registers, segments, IP, and FLAGS</h3>
+                <p>
+                  The original 8086 model is not just an opcode table. It is a
+                  register file, a segmented memory model, and a set of control
+                  and status flags that shape how instructions behave.
+                </p>
+              </div>
+              <div class="register-grid" id="registerGrid"></div>
+            </section>
+
+            <section class="content-subsection">
+              <div class="subsection-heading">
+                <p class="subsection-kicker">Address Formation</p>
+                <h3>20-bit physical addresses from segment:offset pairs</h3>
+                <p>
+                  Intel describes the 8086 as a 16-bit processor that reaches a
+                  one-megabyte physical space by combining a segment base with an
+                  offset.
+                </p>
+              </div>
+
+              <div class="baseline-explainer">
+                <article class="formula-card address-card">
+                  <p class="formula-label">Physical Address Rule</p>
+                  <div class="address-formula">
+                    <code>physical = (segment &lt;&lt; 4) + offset</code>
+                  </div>
+                  <p class="formula-foot">
+                    Segments begin on 16-byte boundaries. A segment register
+                    supplies the base, then a 16-bit offset selects a location
+                    inside that 64 KB window.
+                  </p>
+                </article>
+
+                <article class="detail-card baseline-note">
+                  <p class="detail-kicker">Key Constraints</p>
+                  <ul class="compact-list">
+                    <li><code>1 MB</code> physical address space</li>
+                    <li><code>64 KB</code> maximum per segment</li>
+                    <li><code>CS</code>, <code>DS</code>, <code>SS</code>, and <code>ES</code> are the active segment registers</li>
+                    <li>The hardware stack is word-oriented and grows downward in memory</li>
+                  </ul>
+                </article>
+              </div>
+
+              <div class="flag-grid" id="flagGrid"></div>
+            </section>
+          </div>
+
+          <aside class="detail-card source-card">
+            <p class="detail-kicker">Intel 1979 Scope</p>
+            <h3>What the original spec actually centers on</h3>
+            <p class="detail-summary">
+              The 8086 manuals cover more than encodings: the execution unit,
+              bus interface unit, segmentation, stack discipline, interrupts,
+              I/O, and the full instruction-set families.
+            </p>
+            <dl class="detail-list">
+              <div>
+                <dt>Architecture</dt>
+                <dd>Execution unit, bus interface unit, registers, flags, and instruction pointer.</dd>
+              </div>
+              <div>
+                <dt>Memory Model</dt>
+                <dd>Segmentation, physical address generation, stack implementation, and reserved memory locations.</dd>
+              </div>
+              <div>
+                <dt>Control Flow</dt>
+                <dd>Interrupts, program transfer, flag operations, synchronization, and processor control.</dd>
+              </div>
+            </dl>
+          </aside>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="atlas">
+        <div class="section-heading">
+          <p class="eyebrow">2. Octal Atlas</p>
+          <h2>Read the map before the table</h2>
+          <p>
+            Every cell is one byte from <code>000</code> to <code>377</code>.
+            Start with the four valid byte ranges, then drill down into
+            individual opcodes inside each range.
+          </p>
+        </div>
+
+        <div class="atlas-layout">
+          <div class="atlas-stage">
+            <section class="atlas-subsection">
+              <div class="subsection-heading">
+                <p class="subsection-kicker">Byte Ranges</p>
+                <h3>Four real bands in one byte</h3>
+                <p>
+                  A byte in octal stops at <code>377</code>, so the atlas is
+                  split into four top-level ranges: <code>000&ndash;077</code>,
+                  <code>100&ndash;177</code>, <code>200&ndash;277</code>, and
+                  <code>300&ndash;377</code>.
+                </p>
+              </div>
+              <div class="atlas-range-grid" id="atlasLegend"></div>
+            </section>
+
+            <section class="atlas-subsection">
+              <div class="subsection-heading">
+                <p class="subsection-kicker">Opcode Field</p>
+                <h3>Read it as four octal boards</h3>
+                <p>
+                  Each board fixes the first digit. Rows are the middle octal
+                  digit, columns are the last one, and selected anchors get a
+                  short tag instead of a full caption block.
+                </p>
+              </div>
+              <div class="opcode-board-grid" id="opcodeBoards" aria-label="Octal opcode atlas"></div>
+            </section>
+          </div>
+
+          <aside class="detail-card atlas-detail-card" id="atlasDetail">
+            <p class="detail-kicker">Selected opcode</p>
+            <h3>210</h3>
+            <p class="detail-summary">
+              <code>210</code> is one of the article&rsquo;s anchor examples:
+              <code>mov Eb, Rb</code>.
+            </p>
+            <dl class="detail-list">
+              <div>
+                <dt>First digit</dt>
+                <dd>Major band in the octal atlas</dd>
+              </div>
+              <div>
+                <dt>Middle digit</dt>
+                <dd>Often part of the operation family</dd>
+              </div>
+              <div>
+                <dt>Last digit</dt>
+                <dd>Often flips operand direction or width</dd>
+              </div>
+            </dl>
+            <div class="detail-examples" id="atlasExamples"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="alu">
+        <div class="alu-layout">
+          <div class="alu-main">
+            <div class="section-heading">
+              <p class="eyebrow">3. Operator Wheel</p>
+              <h2>One digit can rotate the whole arithmetic family</h2>
+              <p>
+                In the article, the middle octal digit <code>P</code> picks the
+                operator while the outer digits preserve the instruction shape.
+              </p>
+            </div>
+            <div class="operator-strip" id="operatorStrip"></div>
+          </div>
+          <div class="formula-card">
+            <p class="formula-label">Live family</p>
+            <div class="formula-stack" id="formulaStack"></div>
+            <div class="formula-foot">
+              Immediate forms keep the same operator digit:
+              <code>200 xPm</code>, <code>201 xPm</code>,
+              <code>203 xPm</code>.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="decoder">
+        <div class="section-heading">
+          <p class="eyebrow">4. Decoder</p>
+          <h2>Turn an octal sequence into assembly logic</h2>
+          <p>
+            This decoder is intentionally narrow. It understands the article&rsquo;s
+            demonstration patterns for <code>mov</code> and the base arithmetic
+            families, then shows how the <code>xrm</code> digits split into
+            address mode and register selection.
+          </p>
+        </div>
+
+        <div class="decoder-layout">
+          <div class="decoder-controls">
+            <label class="field">
+              <span>Octal sequence</span>
+              <input
+                id="sequenceInput"
+                type="text"
+                value="210 135 375"
+                spellcheck="false"
+                aria-describedby="sequenceHint"
+              />
+            </label>
+            <p class="field-hint" id="sequenceHint">
+              Space-separated octal bytes. Try <code>210 135 375</code>,
+              <code>216 332</code>, or <code>050 321</code>.
+            </p>
+            <div class="preset-row">
+              <button class="preset-button" data-sequence="210 135 375">
+                Example 1
+              </button>
+              <button class="preset-button" data-sequence="216 332">
+                Example 2
+              </button>
+              <button class="preset-button" data-sequence="050 321">
+                Arithmetic
+              </button>
+            </div>
+          </div>
+
+          <div class="decoder-output">
+            <article class="result-card" id="decodeSummary"></article>
+            <article class="result-card" id="decodeBreakdown"></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="four-readings">
+        <div class="section-heading">
+          <p class="eyebrow">5. Later x86 Aside</p>
+          <h2>The same bytes can change meaning in later x86</h2>
+          <p>
+            The original 8086 only has the 16-bit interpretation. This panel is
+            kept as a later-x86 aside to show how the same byte pattern was
+            extended once 32-bit address and operand sizes arrived.
+          </p>
+        </div>
+
+        <div class="toggle-layout">
+          <div class="toggle-card">
+            <div class="toggle-group">
+              <span class="toggle-label">Address size</span>
+              <div class="segmented" id="addressSizeToggle">
+                <button class="is-active" data-value="16">16-bit</button>
+                <button data-value="32">32-bit</button>
+              </div>
+            </div>
+
+            <div class="toggle-group">
+              <span class="toggle-label">Word size</span>
+              <div class="segmented" id="wordSizeToggle">
+                <button class="is-active" data-value="16">16-bit</button>
+                <button data-value="32">32-bit</button>
+              </div>
+            </div>
+
+            <div class="reading-result" id="readingResult"></div>
+          </div>
+
+          <div class="toggle-note">
+            <p class="note-kicker">Sequence</p>
+            <code>211 135 375</code>
+            <p>
+              In the original explanation this is <code>mov Ew, Rw</code> with
+              <code>xm = 15</code>, <code>r = 3</code>, and displacement
+              <code>-3</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="addressing">
+        <div class="section-heading">
+          <p class="eyebrow">6. Address Matrix</p>
+          <h2>The 16-bit addressing table becomes legible when it is touchable</h2>
+          <p>
+            Click any <code>xm</code> cell. The row gives the displacement
+            policy, the column gives the base form, and <code>x = 3</code>
+            flips the whole space into register mode.
+          </p>
+        </div>
+
+        <div class="matrix-layout">
+          <div class="matrix-grid-wrap">
+            <div class="matrix-grid" id="matrixGrid"></div>
+          </div>
+
+          <aside class="detail-card matrix-detail" id="matrixDetail">
+            <p class="detail-kicker">Selected mode</p>
+            <h3>15</h3>
+            <p class="detail-summary">
+              <code>x = 1</code> means signed byte displacement; the base form
+              for <code>m = 5</code> is <code>DS:[DI + Dc]</code>.
+            </p>
+            <dl class="detail-list">
+              <div>
+                <dt>Byte-sized target</dt>
+                <dd><code>Eb</code> points to a byte</dd>
+              </div>
+              <div>
+                <dt>Word-sized target</dt>
+                <dd><code>Ew</code> points to a word</dd>
+              </div>
+              <div>
+                <dt>Decoder note</dt>
+                <dd>Cell <code>15</code> appears in Example 1</dd>
+              </div>
+            </dl>
+          </aside>
+        </div>
+      </section>
+
+      <section class="panel reveal" id="coverage">
+        <div class="section-heading">
+          <p class="eyebrow">7. Intel 1979 Coverage</p>
+          <h2>What the original manuals cover beyond the octal thesis</h2>
+          <p>
+            These cards mirror the major buckets in Intel&rsquo;s 1979 8086
+            documentation so the page covers more than a few favorite opcode
+            patterns.
+          </p>
+        </div>
+
+        <div class="coverage-grid" id="coverageGrid"></div>
+      </section>
+    </main>
+
+    <footer class="footer reveal">
+      <p>
+        Source material:
+        <a
+          href="https://web.archive.org/web/20090803194252/http://geocities.com/SiliconValley/heights/7052/opcode.txt"
+          target="_blank"
+          rel="noreferrer"
+          >x86 is an octal machine</a> + 
+        <a
+          href="https://gist.github.com/seanjensengrey/f971c20d05d4d0efc0781f2f3c0353da"
+          target="_blank"
+          rel="noreferrer"
+          >gist by Sean Jensen Grey</a>
+      </p>
+      <p>
+        8086 baseline additions derived from Intel&rsquo;s
+        <a
+          href="https://bitsavers.org/components/intel/8086/9800722-03_The_8086_Family_Users_Manual_Oct79.pdf"
+          target="_blank"
+          rel="noreferrer"
+          >8086 Family User&rsquo;s Manual</a
+        >
+        and
+        <a
+          href="https://bitsavers.org/components/intel/8086/9800749-1_MCS-86_Assembly_Language_Reference_Guide_Oct78.pdf"
+          target="_blank"
+          rel="noreferrer"
+          >MCS-86 Assembly Language Reference Guide</a
+        >.
+      </p>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
